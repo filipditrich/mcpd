@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - name: Lint
+        run: uv run ruff check src tests && uv run ruff format --check src tests
+      - name: Tests
+        run: uv run pytest -q
+      - name: CLI smoke
+        run: |
+          uv run mcpd --version
+          uv run mcpd --help
