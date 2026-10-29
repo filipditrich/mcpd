@@ -109,7 +109,7 @@ class FakeUpstream:
         return web.json_response(
             {
                 "client_id": client_id,
-                "client_name": "MCP Proxy (mcpd)",
+                "client_name": "mcpd",
                 "redirect_uris": ["http://localhost:8790/callback"],
             }
         )

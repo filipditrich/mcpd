@@ -108,7 +108,7 @@ How mcpd treats a failed refresh:
 
 ### Consent screens
 
-A consent screen can only name an app it can verify. A registered client on a localhost redirect names itself, so servers show its name as unverified, or show "an app on this computer" when it gave none. A server that publishes mcpd's metadata document on its own domain proves the name instead: the NFCtron MCP host (`https://mcp.nfctron.com/clients/mcpd`) does, and its Hub consent screen shows **MCP Proxy (mcpd)** with this logo and a verified badge.
+A consent screen can only name an app it can verify. A registered client on a localhost redirect names itself, so servers show its name as unverified, or show "an app on this computer" when it gave none. A server that publishes mcpd's metadata document on its own domain proves the name instead: the NFCtron MCP host (`https://mcp.nfctron.com/clients/mcpd`) does, and its Hub consent screen shows **mcpd** with this logo and a verified badge.
 
 `mcpd logout <name>` also forgets the client registration, so the next login picks up a published document or registers again under the current name.
 

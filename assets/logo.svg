@@ -1,10 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" role="img" aria-label="MCP Proxy (mcpd)">
-  <title>MCP Proxy (mcpd)</title>
-  <!-- many local clients on the left, one signed-in connection on the right, the proxy in between -->
-  <path fill="none" stroke="#0EA5E9" stroke-width="1.75" stroke-linecap="round" d="M4 6.5h2.5c1.4 0 2.5 1.1 2.5 2.5v.5M4 17.5h2.5c1.4 0 2.5-1.1 2.5-2.5v-.5M4 12h5M15 12h5"/>
-  <circle cx="3" cy="6.5" r="1.6" fill="#0EA5E9"/>
-  <circle cx="3" cy="12" r="1.6" fill="#0EA5E9"/>
-  <circle cx="3" cy="17.5" r="1.6" fill="#0EA5E9"/>
-  <rect x="9" y="8" width="6" height="8" rx="2" fill="#0EA5E9"/>
-  <circle cx="21" cy="12" r="2" fill="#0EA5E9"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96" role="img" aria-label="mcpd"><rect fill="#0c0c0a" width="24" height="24" rx="5.5"/><path fill="#fafafa" stroke="#fafafa" stroke-width="0.18" stroke-linejoin="round" fill-rule="evenodd" d="M4.2 16.86 12.32 7.54 19.8 7.54 19.8 16.86ZM6.47 16.86 9.04 16.86 15.03 9.98 15.03 9.6 12.8 9.6ZM11.06 16.86 13.66 16.86 17.85 12.05 17.85 9.6 17.39 9.6ZM15.68 16.86 17.85 16.86 17.85 14.37Z"/></svg>
