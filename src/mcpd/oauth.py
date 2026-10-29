@@ -112,11 +112,31 @@ async def discover(session: aiohttp.ClientSession, url: str) -> dict:
     if words and "offline_access" in (meta.get("scopes_supported") or []) and "offline_access" not in words:
         words.append("offline_access")
     return {
+        "issuer": issuer,
+        "metadata_documents": bool(meta.get("client_id_metadata_document_supported")),
         "resource": (resource_meta or {}).get("resource") or url,
         "scope": " ".join(words),
         "authorization_endpoint": meta["authorization_endpoint"],
         "token_endpoint": meta["token_endpoint"],
         "registration_endpoint": meta["registration_endpoint"],
+    }
+
+
+async def published_client(session: aiohttp.ClientSession, auth: dict, redirect_uri: str) -> dict | None:
+    """The client id document the server publishes for mcpd, if any; its consent screen can then name mcpd for sure."""
+    if not auth.get("metadata_documents"):
+        return None
+    url = f"{origin_and_path(auth['issuer'])[0]}/clients/mcpd"
+    document = await get_json(session, url)
+    if not document or document.get("client_id") != url:
+        return None
+    return {
+        "client_id": url,
+        "client_secret": None,
+        "auth_method": "none",
+        "redirect_uri": redirect_uri,
+        "registration_endpoint": auth["registration_endpoint"],
+        "metadata_document": True,
     }
 
 

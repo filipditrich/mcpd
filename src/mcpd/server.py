@@ -310,7 +310,11 @@ class Daemon:
 
     async def begin_login(self, name: str) -> str:
         auth = await oauth.discover(self.session, self.config.upstreams[name])
-        client = self.record(name).get("client") or {}
+        client = (
+            await oauth.published_client(self.session, auth, self.redirect_uri)
+            or self.record(name).get("client")
+            or {}
+        )
         if (
             client.get("registration_endpoint") != auth["registration_endpoint"]
             or client.get("redirect_uri") != self.redirect_uri
@@ -402,7 +406,8 @@ class Daemon:
         if name not in self.config.upstreams:
             return web.json_response({"error": "unknown_upstream"}, status=404)
         async with self.locks[name]:
-            self.update(name, tokens=None, state="needs_login", error="Logged out")
+            # The registration goes too: the next login registers again, with today's client name and redirect.
+            self.update(name, tokens=None, client=None, state="needs_login", error="Logged out")
         return web.json_response({"ok": True})
 
 

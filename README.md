@@ -1,3 +1,5 @@
+<img src="assets/logo.svg" alt="" width="72" height="72">
+
 # mcpd
 
 **One login for remote MCP servers, shared by every agent session.** Log in to Bytebase, Metabase, Sentry or any other OAuth MCP server once. Every Claude Code terminal uses that login, and none of them can log the others out.
@@ -92,7 +94,7 @@ Switchboard, my local service dashboard, shows the same state as an **MCP logins
 Logging in follows the MCP authorization spec:
 
 1. Discover the authorization server: the `401` challenge's `resource_metadata` (RFC 9728), then the server metadata (RFC 8414).
-2. Register a client dynamically (RFC 7591) with the redirect `http://localhost:8790/callback`.
+2. Get a client id. A server that supports client ID metadata documents and publishes one for mcpd at `{issuer origin}/clients/mcpd` is used with that document's URL as the client id; no registration. Otherwise mcpd registers a client dynamically (RFC 7591) as `mcpd`, with the redirect `http://localhost:8790/callback`.
 3. Open the browser with PKCE (S256) and the `resource` parameter (RFC 8707).
 4. Exchange the code at the callback and save the tokens.
 
@@ -103,6 +105,12 @@ How mcpd treats a failed refresh:
 | `invalid_grant`, `unsupported_grant_type` | The login is gone. The server shows `needs_login`. |
 | `invalid_client`, `unauthorized_client` | The login and the client registration are gone. The next login registers a new client. |
 | 5xx, timeout, network error, anything else | Tokens are kept. The server shows `error`. Requests fail fast for 20 seconds, then refresh again. An access token that has not expired yet keeps working. |
+
+### Consent screens
+
+A consent screen can only name an app it can verify. A registered client on a localhost redirect names itself, so servers show its name as unverified, or show "an app on this computer" when it gave none. A server that publishes mcpd's metadata document on its own domain proves the name instead: the NFCtron MCP host (`https://mcp.nfctron.com/clients/mcpd`) does, and its Hub consent screen shows **MCP Proxy (mcpd)** with this logo and a verified badge.
+
+`mcpd logout <name>` also forgets the client registration, so the next login picks up a published document or registers again under the current name.
 
 A server that answers `401` again right after a successful refresh gets a `502`; mcpd keeps the login, because such a `401` is usually a scope or server problem, not a dead grant.
 

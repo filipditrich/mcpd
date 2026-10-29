@@ -21,6 +21,7 @@ class FakeUpstream:
         self.token_failure: str | None = None  # "server_error", "invalid_grant" or "invalid_client"
         self.token_delay = 0.0
         self.reject_all = False
+        self.publishes_mcpd = False  # serve /clients/mcpd and accept it as a client id
         self.mcp_requests: list[dict] = []
         self.sse_gate = asyncio.Event()
         self.runner: web.AppRunner | None = None
@@ -32,6 +33,7 @@ class FakeUpstream:
         app.router.add_get("/.well-known/oauth-protected-resource/mcp", self.resource_metadata)
         app.router.add_get("/.well-known/oauth-authorization-server", self.server_metadata)
         app.router.add_post("/register", self.register)
+        app.router.add_get("/clients/mcpd", self.mcpd_document)
         app.router.add_get("/authorize", self.authorize)
         app.router.add_post("/token", self.token)
         self.runner = web.AppRunner(app)
@@ -96,6 +98,19 @@ class FakeUpstream:
                 "token_endpoint": f"{self.base}/token",
                 "registration_endpoint": f"{self.base}/register",
                 "code_challenge_methods_supported": ["S256"],
+                "client_id_metadata_document_supported": self.publishes_mcpd,
+            }
+        )
+
+    async def mcpd_document(self, _request: web.Request) -> web.Response:
+        if not self.publishes_mcpd:
+            return web.Response(status=404)
+        client_id = f"{self.base}/clients/mcpd"
+        return web.json_response(
+            {
+                "client_id": client_id,
+                "client_name": "MCP Proxy (mcpd)",
+                "redirect_uris": ["http://localhost:8790/callback"],
             }
         )
 
@@ -107,7 +122,14 @@ class FakeUpstream:
 
     async def authorize(self, request: web.Request) -> web.Response:
         q = request.query
-        if self.clients.get(q["client_id"]) != q["redirect_uri"] or q["code_challenge_method"] != "S256":
+        published = (
+            self.publishes_mcpd
+            and q["client_id"] == f"{self.base}/clients/mcpd"
+            and q["redirect_uri"].startswith("http://localhost:")
+        )
+        if (not published and self.clients.get(q["client_id"]) != q["redirect_uri"]) or q[
+            "code_challenge_method"
+        ] != "S256":
             return web.Response(status=400, text="bad authorize request")
         code = secrets.token_hex(6)
         self.codes[code] = {

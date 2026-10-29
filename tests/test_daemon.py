@@ -209,6 +209,31 @@ async def test_dead_client_registration_is_replaced_on_next_login(daemon, upstre
     assert (await call(daemon, http, {"jsonrpc": "2.0", "id": 2, "method": "ping"})).status == 200
 
 
+async def test_logout_registers_again_on_next_login(daemon, upstream, http):
+    # Catches: logout keeping a registration made before the server knew our name, so its consent screen never shows it.
+    async with http.post(
+        f"http://127.0.0.1:{daemon.port}/_mcpd/logout/fake", headers={TOKEN_HEADER: daemon.secret}
+    ) as response:
+        assert response.status == 200
+    await login(daemon, http)
+    assert len(upstream.clients) == 2
+
+
+async def test_published_mcpd_document_replaces_registration(upstream, paths, http):
+    # Catches: registering nameless when the server publishes a document that names mcpd on its consent screen.
+    upstream.publishes_mcpd = True
+    d = await started(upstream, paths)
+    try:
+        await login(d, http)
+        assert upstream.clients == {}
+        stored = json.loads(paths.tokens.read_text())["fake"]
+        assert stored["client"]["client_id"] == f"{upstream.base}/clients/mcpd"
+        assert (await call(d, http, {"jsonrpc": "2.0", "id": 1, "method": "ping"})).status == 200
+    finally:
+        upstream.sse_gate.set()
+        await d.stop()
+
+
 async def test_only_the_oauth_callback_skips_the_local_token(daemon, http):
     # Catches: a path-based exemption letting a web page POST to /callback without the secret.
     response = await http.post(f"http://127.0.0.1:{daemon.port}/callback", json={})
