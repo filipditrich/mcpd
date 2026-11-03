@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
+import resource
+import socket
 import stat
+import sys
 import time
 
 import aiohttp
@@ -156,6 +161,65 @@ async def test_event_stream_is_relayed_as_it_arrives(daemon, upstream, http):
     assert first == b'data: {"n": 1}\n\n'
     upstream.sse_gate.set()
     assert await asyncio.wait_for(response.content.read(), timeout=2) == b'data: {"n": 2}\n\n'
+
+
+async def test_upstream_cutting_an_event_stream_ends_it_cleanly(daemon, http, caplog):
+    # Catches: an upstream dropping a long-lived stream mid-chunk escaping relay(): aiohttp then logs a
+    # traceback per cut (157k of them in the live log) and the client gets a broken response.
+    response = await call(daemon, http, {"jsonrpc": "2.0", "id": 1, "method": "cut"})
+    assert await asyncio.wait_for(response.content.read(), timeout=2) == b'data: {"n": 1}\n\n'
+    await asyncio.sleep(0.1)
+    assert [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR] == []
+
+
+async def test_many_terminals_streams_stay_open_under_launchds_file_limit(upstream, tmp_path):
+    # Catches: launchd's 256-file soft limit (EMFILE stops accept() and every terminal's MCPs drop at once)
+    # and aiohttp's default 100-connection pool (stream 101 and every request after it hang).
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (min(4096, hard), hard))  # room for both ends in this process
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    (tmp_path / "config.toml").write_text(f'port = {port}\n[upstreams]\nfake = "{upstream.base}/mcp"\n')
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "mcpd",
+        "serve",
+        env=os.environ | {"MCPD_HOME": str(tmp_path)},
+        preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_NOFILE, (256, hard)),
+    )
+    base = f"http://127.0.0.1:{port}"
+    streams: list[aiohttp.ClientResponse] = []
+    try:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=0)) as http:
+            for _ in range(100):
+                try:
+                    token = (tmp_path / "state/client-token").read_text()
+                    async with http.post(f"{base}/_mcpd/login/fake", headers={TOKEN_HEADER: token}) as r:
+                        url = (await r.json())["url"]
+                    break
+                except (OSError, aiohttp.ClientError):
+                    await asyncio.sleep(0.1)
+            async with http.get(url) as r:
+                assert r.status == 200
+            headers = {TOKEN_HEADER: token, "Accept": "application/json, text/event-stream"}
+
+            async def open_stream(i: int) -> bytes:
+                r = await http.post(f"{base}/fake", json={"id": i, "method": "stream"}, headers=headers)
+                streams.append(r)
+                return await r.content.readuntil(b"\n\n")
+
+            firsts = await asyncio.wait_for(asyncio.gather(*(open_stream(i) for i in range(150))), 10)
+            assert set(firsts) == {b'data: {"n": 1}\n\n'}
+            ping = await asyncio.wait_for(http.post(f"{base}/fake", json={"id": 0}, headers=headers), 5)
+            assert ping.status == 200
+            for r in streams:
+                r.close()
+    finally:
+        proc.terminate()
+        await proc.wait()
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
 
 
 async def test_rejected_fresh_token_keeps_the_refresh_token(daemon, upstream, http):

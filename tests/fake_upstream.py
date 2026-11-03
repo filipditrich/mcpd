@@ -76,6 +76,12 @@ class FakeUpstream:
             await response.write(b'data: {"n": 2}\n\n')
             await response.write_eof()
             return response
+        if body.get("method") == "cut":
+            response = web.StreamResponse(headers={"Content-Type": "text/event-stream"})
+            await response.prepare(request)
+            await response.write(b'data: {"n": 1}\n\n')
+            request.transport.close()  # mid-chunk, the way servers drop long-lived streams
+            return response
         return web.json_response(
             {"jsonrpc": "2.0", "id": body.get("id"), "result": {"echo": body}},
             headers={"Mcp-Session-Id": "session-1"},
