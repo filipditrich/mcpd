@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
 
@@ -46,3 +47,22 @@ def test_import_takes_only_oauth_http_servers(tmp_path, monkeypatch):
         cli.main(["import-claude"])
     assert done.value.code == 0
     assert load(paths.config).upstreams == {"bytebase": "https://bytebase.example.com/mcp"}
+
+
+def test_daemon_log_rotates_instead_of_growing(tmp_path, monkeypatch):
+    # Catches: an unbounded mcpd.log; the live one reached 394 MB of stream-cut tracebacks.
+    monkeypatch.setattr(cli, "LOG_MAX_BYTES", 10_000)
+    paths = Paths(tmp_path / "config.toml", tmp_path / "state")
+    root = logging.getLogger()
+    before = list(root.handlers)
+    try:
+        cli.log_to_file(paths)
+        for i in range(1000):
+            logging.getLogger("mcpd").warning("line %d %s", i, "x" * 60)
+    finally:
+        for handler in set(root.handlers) - set(before):
+            root.removeHandler(handler)
+            handler.close()
+    assert paths.log.stat().st_size <= 10_000
+    assert "line 999 " in paths.log.read_text()
+    assert sum(f.stat().st_size for f in paths.state.glob("mcpd.log*")) < 50_000

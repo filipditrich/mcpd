@@ -8,6 +8,7 @@ import html
 import json
 import logging
 import os
+import resource
 import secrets
 import signal
 import time
@@ -30,6 +31,7 @@ REFRESH_EARLY_S = 60
 MAINTAIN_EVERY_S = 60
 MAINTAIN_AHEAD_S = 600
 RETRY_AFTER_S = 20
+FILE_LIMIT = 8192
 HOP = {
     "connection",
     "keep-alive",
@@ -104,6 +106,8 @@ class Daemon:
 
     async def start(self) -> None:
         self.session = aiohttp.ClientSession(
+            # Each terminal holds a stream per upstream; the default 100-connection pool hangs the 101st.
+            connector=aiohttp.TCPConnector(limit=0),
             timeout=aiohttp.ClientTimeout(total=None, sock_connect=15),
             headers={"User-Agent": "mcpd/0.1"},
         )
@@ -297,9 +301,14 @@ class Daemon:
             await response.prepare(request)
             async for chunk in upstream.content.iter_any():
                 await response.write(chunk)
-            await response.write_eof()
+        except aiohttp.ClientPayloadError as exc:
+            # Servers drop long-lived event streams; the client reconnects. Other bodies stay truncated.
+            if response.content_type != "text/event-stream":
+                raise
+            log.debug("%s ended its event stream early: %s", request.match_info["name"], exc)
         finally:
             upstream.release()
+        await response.write_eof()
         return response
 
     # login
@@ -420,7 +429,15 @@ def page(title: str, text: str, status: int = 200) -> web.Response:
     return web.Response(text=body, content_type="text/html", status=status)
 
 
+def raise_file_limit() -> None:
+    """launchd starts agents with a 256-file soft limit; every held client stream costs two sockets."""
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    if soft < FILE_LIMIT:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (min(FILE_LIMIT, hard), hard))
+
+
 async def serve(config: Config, paths: Paths) -> None:
+    raise_file_limit()
     daemon = Daemon(config, paths)
     await daemon.start()
     stopping = asyncio.Event()
