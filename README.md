@@ -122,7 +122,8 @@ A server that answers `401` again right after a successful refresh gets a `502`;
 | `~/Library/Application Support/mcpd/tokens.json` | Client registrations and tokens. Mode 0600, replaced atomically. |
 | `~/Library/Application Support/mcpd/client-token` | The secret local clients send as `X-Mcpd-Token`. |
 | `~/Library/Application Support/mcpd/claude-backup.json` | Original Claude Code entries replaced by `claude apply`. |
-| `~/Library/Application Support/mcpd/mcpd.log` | Daemon log. It never contains tokens. |
+| `~/Library/Application Support/mcpd/mcpd.log` | Daemon log. It never contains tokens. Rotates at 10 MB and keeps three old files (`mcpd.log.1` to `.3`). |
+| `~/Library/Application Support/mcpd/stderr.log` | Output launchd catches outside the log, such as a crash at startup. |
 
 `MCPD_HOME` moves the config and state under one directory.
 

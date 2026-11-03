@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import logging
+import logging.handlers
 import os
 import plistlib
 import shutil
@@ -22,6 +23,7 @@ LABEL = "com.filipditrich.mcpd"
 PLIST = Path.home() / "Library/LaunchAgents" / f"{LABEL}.plist"
 CLAUDE_JSON = Path(os.environ.get("MCPD_CLAUDE_JSON", Path.home() / ".claude.json"))
 EXIT_OK, EXIT_ERROR, EXIT_ATTENTION, EXIT_DAEMON = 0, 1, 2, 3
+LOG_MAX_BYTES = 10 * 1024 * 1024
 
 
 def control(paths: Paths, config: Config, method: str, path: str, timeout: float = 30) -> dict:
@@ -257,8 +259,9 @@ def plist_bytes(paths: Paths) -> bytes:
             "RunAtLoad": True,
             "KeepAlive": True,
             "ThrottleInterval": 10,
-            "StandardOutPath": str(paths.log),
-            "StandardErrorPath": str(paths.log),
+            # The daemon rotates mcpd.log itself; launchd keeps only what escapes logging.
+            "StandardOutPath": str(paths.state / "stderr.log"),
+            "StandardErrorPath": str(paths.state / "stderr.log"),
         }
     )
 
@@ -316,8 +319,17 @@ def cmd_logs(args: argparse.Namespace, paths: Paths) -> int:
     return EXIT_OK
 
 
+def log_to_file(paths: Paths) -> None:
+    paths.state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    handler = logging.handlers.RotatingFileHandler(paths.log, maxBytes=LOG_MAX_BYTES, backupCount=3)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    root = logging.getLogger()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+
 def cmd_serve(_args: argparse.Namespace, paths: Paths) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    log_to_file(paths)
     config = load(paths.config)
     asyncio.run(serve(config, paths))
     return EXIT_OK
